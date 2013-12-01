@@ -13,6 +13,8 @@
 #define EMPTY -1
 #define STALL 1
 #define NOSTALL 0
+#define TRUE 1
+#define FALSE 0
 
 #define MEMLOC( x ) ( (x) / WORD )
 #define MADDR( x )  ( (x) * WORD )
@@ -52,14 +54,25 @@ RegVal Registers[NUMREGS];
 MemVal Memory[MEMSZ];
 int instcount = 0;
 int WB = EMPTY;
+int WB_count = 0;
 int MEM3 = EMPTY;
+int MEM3_count = 0;
 int MEM2 = EMPTY;
+int MEM2_count = 0;
 int MEM1 = EMPTY;
+int MEM1_count = 0;
 int EX = EMPTY;
+int EX_count = 0;
 int ID = EMPTY;
+int ID_count = 0;
 int IF2 = EMPTY;
+int IF2_count = 0;
 int IF1 = EMPTY;
+int IF1_count = 1;
 int inst_counter = 0;
+int flush = FALSE;
+int cycle = 1;
+int inst_cycle = 1;
 FILE * fout;
 
 int IF1_stall  = NOSTALL;
@@ -94,8 +107,12 @@ int main( int argc, char ** argv )
   /* variables */
   const char * file_name = "input.txt";
   FILE * pFile;
+  int i;
+  /*************/
+
+  /* variable init */
   fout = stdout;
-  /*-----------*/
+  /****************/
 
   /* Open File */
   pFile = fopen( file_name, "r" );
@@ -107,10 +124,11 @@ int main( int argc, char ** argv )
   /*  print_insts(); */
 #endif
 
-  do
+  i = 0;
+  do 
     {
       /* Pipeline */
-      printf("c#%d ", inst_counter + 1 );
+      printf("c#%d ", cycle );
       wb();
       mem3();
       mem2();
@@ -120,15 +138,16 @@ int main( int argc, char ** argv )
       if2();
       if1();
       printf("\n");
-      if( !MEM3_stall ) WB = MEM3;
-      if( !MEM2_stall ) MEM3 = MEM2;
-      if( !MEM1_stall ) MEM2 = MEM1;
-      if( !EX_stall ) MEM1 = EX;
-      if( !ID_stall ) EX = ID;
-      if( !IF2_stall ) ID = IF2;
-      if( !IF1_stall ) IF2 = IF1;
-      
-    } while( (IF1 != EMPTY) || (IF2 != EMPTY) || (ID != EMPTY) || (EX != EMPTY) || (MEM1 != EMPTY) || (MEM2 != EMPTY) || (MEM3 != EMPTY) || (WB != EMPTY) );
+      if( !MEM3_stall ) { WB = MEM3; WB_count = MEM3_count; }
+      if( !MEM2_stall ) { MEM3 = MEM2; MEM3_count = MEM2_count; }
+      if( !MEM1_stall ) { MEM2 = MEM1; MEM2_count = MEM1_count; }
+      if( !EX_stall   ) { MEM1 = EX; MEM1_count = EX_count; }
+      if( !ID_stall   ) { EX = ID; EX_count = ID_count; } else MEM1 = EMPTY;
+      if( !IF2_stall  ) { ID = IF2; ID_count = IF2_count; }
+      if( !IF1_stall  ) { IF2 = IF1; IF2_count = IF1_count; ++inst_cycle; }
+      if( flush ) { IF1 = EMPTY; IF2 = EMPTY; ID = EMPTY; EX = EMPTY; flush = FALSE; --inst_cycle; }
+      ++cycle;
+    } while( ( (IF1 != EMPTY) || (IF2 != EMPTY) || (ID != EMPTY) || (EX != EMPTY) || (MEM1 != EMPTY) || (MEM2 != EMPTY) || (MEM3 != EMPTY) || (WB != EMPTY) ) && cycle < 20);
 
   /* end Pipeline */
 
@@ -139,7 +158,10 @@ int main( int argc, char ** argv )
  error:
   printf("ERROR Will Robinson!\n");
  end:
+  for( i = 0; i < instcount; ++i )
+    free( Instructions[i] );
   fclose( pFile );
+  
   return 0;
 }
 
@@ -269,7 +291,7 @@ int read_insts( FILE * pFile )
     {
       if( Instructions[instcount] == NULL )
 	{
-	  Instructions[instcount] = malloc( sizeof( Instructions[instcount] ) );
+	  Instructions[instcount] = malloc( sizeof( *Instructions[instcount] ) );
 	  if( Instructions[instcount] == NULL )
 	    return 1;
 	}
@@ -287,7 +309,7 @@ int read_insts( FILE * pFile )
 	}
       else
 	{
-	  strcpy( label, "" );
+	  label[0] = '\0';
 	  (*curr).label[0] = '\0';
 	  (*curr).labelsz = 0;
 	}
@@ -433,15 +455,15 @@ int init( FILE * pFile )
 int check_stall( int reg )
 {
   /* Check MEM1 */
-  if( EX != EMPTY )
-    {
-      if( (*Instructions[ MEM1 ]).rd == reg ) return 1;
-      if( ( (*Instructions[ MEM1 ]).itype == LD ) && ( (*Instructions[ EX ]).rt == reg  ) ) return 1;
-    }
-  /* Check MEM2 */
   if( MEM1 != EMPTY )
     {
-      if( (*Instructions[ MEM2 ]).rd == reg ) return 1;
+      /*  if( ( (*Instructions[ MEM1 ]).itype == DADD || (*Instructions[ MEM1 ]).itype == SUB ) && (*Instructions[ MEM1 ]).rd == reg ) return 1; */
+      if( ( (*Instructions[ MEM1 ]).itype == LD ) && ( (*Instructions[ MEM1 ]).rt == reg  ) ) return 1;
+    }
+  /* Check MEM2 */
+  if( MEM2 != EMPTY )
+    {
+      /* if( ( (*Instructions[ MEM2 ]).itype == DADD || (*Instructions[ MEM2 ]).itype == SUB ) && (*Instructions[ MEM2 ]).rd == reg ) return 1; */
       if( ( (*Instructions[ MEM2 ]).itype == LD ) && ( (*Instructions[ MEM2 ]).rt == reg  ) ) return 1;
     }
 
@@ -450,18 +472,17 @@ int check_stall( int reg )
 
 void if1()
 {
-  if( IF1_stall && (IF1 != EMPTY) )
-    {
-      fprintf( fout, "I%d-stall ", IF1 + 1);
-      return;
-    }
+  if( flush ) return;
+  if( IF1_stall && (IF1 != EMPTY) ) return; /* stalled */
   if( inst_counter < instcount )
-    IF1 = inst_counter;
+    {
+      IF1 = inst_counter;
+      IF1_count = inst_cycle;
+    }
   else
     IF1 = EMPTY;
   if( IF1 != EMPTY )
-    fprintf( fout, "I%d-IF1 ", IF1 + 1 );
-  /*  IF2 = IF1; */
+    fprintf( fout, "I%d-IF1 ", IF1_count );
   inst_counter++;
 }
 
@@ -469,36 +490,37 @@ void if2()
 {
   if( IF2_stall && (IF2 != EMPTY) )
     {
-      fprintf( fout, "I%d-stall ", IF2 + 1);
+      fprintf( fout, "I%d-stall ", IF2_count );
       return;
     }
-  /*  ID = IF2; */
   if( IF2 != EMPTY )
-    fprintf( fout, "I%d-IF2 ", IF2 + 1 );
+    fprintf( fout, "I%d-IF2 ", IF2_count );
 }
 
 void id()
 {
   if( ID_stall && (ID != EMPTY) )
     {
-      fprintf( fout, "I%d-stall ", ID + 1);
+      fprintf( fout, "I%d-stall ", ID_count );
       return;
     }
-  /*  EX = ID; */
   if( ID != EMPTY )
-    fprintf( fout, "I%d-ID ", ID + 1 );
+    fprintf( fout, "I%d-ID ", ID_count );
 }
 
 void ex()
 {
   struct inst * curr;
-  curr = Instructions[EX];
+  int i;
 
-  if( EX_stall && (EX != EMPTY) )
+  if( EX == EMPTY )
+    return;
+  curr = Instructions[EX];
+  if( EX_stall )
     {
-      if( check_stall( (*curr).rs ) || check_stall( (*curr).rt ) )
+      if( check_stall( (*curr).rs ) || check_stall( (*curr).rt ) ) /* check if stall still present */
 	{
-	  fprintf( fout, "I%d-stall ", EX + 1);
+	  fprintf( fout, "I%d-stall ", EX_count );
 	  return;
 	}
       else
@@ -509,13 +531,6 @@ void ex()
 	  EX_stall = NOSTALL;
 	}
     }
-
-  /*  MEM1 = EX; */
-  if( EX == EMPTY )
-    return;
-
-
-  
   if( (*curr).itype == DADD )
     {
       if( check_stall( (*curr).rs ) || check_stall( (*curr).rt ) )
@@ -524,118 +539,126 @@ void ex()
 	  IF2_stall = STALL;
 	  ID_stall = STALL;
 	  EX_stall = STALL;
-	  fprintf( fout, "I%d-stall ", EX + 1 );
+	  fprintf( fout, "I%d-stall ", EX_count );
 	  return;
 	}
       if( (*curr).rt == NOTUSED )
 	Registers[ RADDR((*curr).rd) ] = Registers[ RADDR((*curr).rs) ] + (*curr).value;
       else
+	Registers[ RADDR((*curr).rd) ] = Registers[ RADDR((*curr).rs) ] + Registers[ RADDR((*curr).rt) ];
+    }
+  else if( (*curr).itype == SUB )
+    {
+      if( check_stall( (*curr).rs ) || check_stall( (*curr).rt ) )
 	{
-	  /*
-	  printf("\n\nDADD:\n");
-	  printf("rs = %d, $s = %d\n", (*curr).rs, Registers[ RADDR((*curr).rs) ] );
-	  printf("rt = %d, $t = %d\n", (*curr).rt, Registers[ RADDR((*curr).rt) ] );
-	  print_regs();
-	  print_mem();
-	  */
-	  Registers[ RADDR((*curr).rd) ] = Registers[ RADDR((*curr).rs) ] + Registers[ RADDR((*curr).rt) ];
-	  /*
-	  print_regs();
-	  print_mem();
-	  printf("\n\n");
-	  */
+	  IF1_stall = STALL;
+	  IF2_stall = STALL;
+	  ID_stall = STALL;
+	  EX_stall = STALL;
+	  fprintf( fout, "I%d-stall ", EX_count );
+	  return;
+	}
+      if( (*curr).rt == NOTUSED )
+	Registers[ RADDR((*curr).rd) ] = Registers[ RADDR((*curr).rs) ] - (*curr).value;
+      else
+	Registers[ RADDR((*curr).rd) ] = Registers[ RADDR((*curr).rs) ] - Registers[ RADDR((*curr).rt) ];
+    }
+  else if( (*curr).itype == BNEZ )
+    {
+      /* check condition */
+      if( check_stall( (*curr).rs ) )
+	{
+	  IF1_stall = STALL;
+	  IF2_stall = STALL;
+	  ID_stall = STALL;
+	  EX_stall = STALL;
+	  fprintf( fout, "I%d-stall ", EX_count );
+	  return;
+	}
+      
+      if( Registers[ RADDR((*curr).rs) ] != 0 )
+	{
+	  for( i = 0; i < instcount; ++i )
+	    {
+	      if( strcmp( (*Instructions[i]).label, (*curr).btarget ) == 0 )
+		break;
+	    }
+	  if( i >= instcount )
+	    {
+	      printf("problem finding branch target!!\n");
+	      return;
+	    }
+	  inst_counter = i;
+	  /* flush pipeline */
+	  flush = TRUE;
+	}
+      else
+	{ /* branch was not taken, so it is done */
+	  /* TODO: check if this is right, or if should let go through the pipeline */
+	  EX = EMPTY;
 	}
     }
-  if( (*curr).itype == SUB )
-    {
-      Registers[ RADDR((*curr).rd) ] = Registers[ RADDR((*curr).rs) ] - Registers[ RADDR((*curr).rt) ];
-    }
 
-  fprintf( fout, "I%d-EX ", EX + 1 );
+  fprintf( fout, "I%d-EX ", EX_count );
 }
 
 void mem1()
 {
-  if( MEM1_stall && (MEM1 != EMPTY) )
+  if( MEM1 == EMPTY )
+    return;
+  else if( MEM1_stall )
     {
-      fprintf( fout, "I%d-stall ", MEM1 + 1 );
+      fprintf( fout, "I%d-stall ", MEM1_count );
       return;
     }
-  /*  MEM2 = MEM1; */
-  if( MEM1 != EMPTY )
-    fprintf( fout, "I%d-MEM1 ", MEM1 + 1 );
+  else /* not stall, not empty */
+    fprintf( fout, "I%d-MEM1 ", MEM1_count );
 }
 
 void mem2()
 {
   struct inst * curr;
-  if( MEM2_stall && (MEM2 != EMPTY) )
-    {
-      fprintf( fout, "I%d-stall ", MEM2 + 1 );
-      return;
-    }
-  /*  MEM3 = MEM2; */
   if( MEM2 == EMPTY )
     return;
-
-  curr = Instructions[MEM2];
-  /* TODO : currently not memory safe at all */
-  if( (*curr).itype == LD )
+  else if( MEM2_stall )
     {
-      /*
-      printf("\n\nLD:\n");
-      printf("rs = %d, $s = %d, offset = %d\n", (*curr).rs, Registers[ RADDR((*curr).rs) ], (*curr).value );
-      printf("rt = %d, $t = %d\n", (*curr).rt, Registers[ RADDR((*curr).rt) ] );
-      print_regs();
-      print_mem();
-      */
-      Registers[ RADDR((*curr).rt) ] = Memory[ MEMLOC( Registers[ RADDR((*curr).rs) ] + (*curr).value) ];
-      /*
-      printf("\n");
-      print_regs();
-      print_mem();
-      printf("\n\n");
-      */
+      fprintf( fout, "I%d-stall ", MEM2_count );
+      return;
     }
-  else if( (*curr).itype == SD ) 
+  else /* not stall, not empty */
     {
-      /*
-      printf("\n\nSD:\n");
-      printf("rs = %d, $s = %d, offset = %d\n", (*curr).rs, Registers[ RADDR((*curr).rs) ], (*curr).value );
-      printf("rt = %d, $t = %d\n", (*curr).rt, Registers[ RADDR((*curr).rt) ] );
-      print_regs();
-      print_mem();
-      */
-      Memory[ MEMLOC(Registers[ RADDR((*curr).rs) ] + (*curr).value) ] = Registers[ RADDR((*curr).rt) ];
-      /*
-      printf("\n");
-      print_regs();
-      print_mem();
-      printf("\n\n");
-      */
+      curr = Instructions[MEM2];
+      /* TODO : currently not memory safe at all */
+      if( (*curr).itype == LD )
+	Registers[ RADDR((*curr).rt) ] = Memory[ MEMLOC( Registers[ RADDR((*curr).rs) ] + (*curr).value) ];
+      else if( (*curr).itype == SD ) 
+	Memory[ MEMLOC(Registers[ RADDR((*curr).rs) ] + (*curr).value) ] = Registers[ RADDR((*curr).rt) ];
+      fprintf( fout, "I%d-MEM2 ", MEM2_count );
     }
-  fprintf( fout, "I%d-MEM2 ", MEM2 + 1 );
 }
 
 void mem3()
 {
-  if( MEM3_stall && (MEM3 != EMPTY) )
+  if( MEM3 == EMPTY )
+    return;
+  else if( MEM3_stall )
     {
-      fprintf( fout, "I%d-stall ", MEM3 + 1 );
+      fprintf( fout, "I%d-stall ", MEM3_count );
       return;
     }
-  /*  WB = MEM3; */
-  if( MEM3 != EMPTY )
-    fprintf( fout, "I%d-MEM3 ", MEM3 + 1 );
+  else /* not stall, not empty */
+    fprintf( fout, "I%d-MEM3 ", MEM3_count );
 }
 
 void wb()
 {
-  if( WB_stall && (WB != EMPTY) )
+  if( WB == EMPTY )
+    return;
+  else if( WB_stall )
     {
-      fprintf( fout, "I%d-stall ", WB + 1 );
+      fprintf( fout, "I%d-stall ", WB_count );
       return;
     }
-  if( WB != EMPTY )
-       fprintf( fout, "I%d-WB ", WB + 1 );
+  else /* not stall, not empty */
+    fprintf( fout, "I%d-WB ", WB_count );
 }

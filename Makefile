@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Werror -Wall -ansi -pedantic -g
+CFLAGS = -Werror -Wall -ansi -pedantic -g -O0
 
 OBJS = main.o
 
