@@ -6,7 +6,8 @@ OBJS = main.o
 build: $(OBJS)
 	$(CC) $(CFLAGS) $(OBJS) -o sim
 run: build
-	./sim
+	./sim > test_output.txt
+	diff test_output.txt output.txt
 main.o: main.c
 	$(CC) $(CFLAGS) -c main.c
 clean:
