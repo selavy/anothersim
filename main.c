@@ -147,7 +147,7 @@ int main( int argc, char ** argv )
       if( !IF1_stall  ) { IF2 = IF1; IF2_count = IF1_count; ++inst_cycle; }
       if( flush ) { IF1 = EMPTY; IF2 = EMPTY; ID = EMPTY; EX = EMPTY; flush = FALSE; --inst_cycle; }
       ++cycle;
-    } while( ( (IF1 != EMPTY) || (IF2 != EMPTY) || (ID != EMPTY) || (EX != EMPTY) || (MEM1 != EMPTY) || (MEM2 != EMPTY) || (MEM3 != EMPTY) || (WB != EMPTY) ) && cycle < 20);
+    } while( ( (IF1 != EMPTY) || (IF2 != EMPTY) || (ID != EMPTY) || (EX != EMPTY) || (MEM1 != EMPTY) || (MEM2 != EMPTY) || (MEM3 != EMPTY) || (WB != EMPTY) ) );
 
   /* end Pipeline */
 
