@@ -85,8 +85,8 @@ int MEM3_stall = NOSTALL;
 int WB_stall   = NOSTALL;
 
 /* FUNCTIONS DECLARATIONS */
-void print_regs();
-void print_mem();
+void print_regs( FILE * pFile );
+void print_mem( FILE * pFile );
 void print_insts();
 int read_regs( FILE * pFile );
 int read_mem( FILE * pFile );
@@ -105,18 +105,34 @@ void wb();
 int main( int argc, char ** argv )
 {
   /* variables */
-  const char * file_name = "input.txt";
+  /*  const char * file_name = "input.txt"; */
   FILE * pFile;
   int i;
+  char in_file[MAX_STR+1];
+  char out_file[MAX_STR+1];
   /*************/
 
   /* variable init */
-  fout = stdout;
+  /*fout = stdout; */
   /****************/
 
+  printf("Input file? ");
+  fgets( in_file, MAX_STR, stdin );
+
+  printf("Output file? ");
+  fgets( out_file, MAX_STR, stdin );
+
+  /* chomp the newline char from both */
+  sscanf( in_file, "%s\n", in_file );
+  sscanf( out_file, "%s\n", out_file );
+
   /* Open File */
-  pFile = fopen( file_name, "r" );
-  if( pFile == NULL ) return 1;
+  /*pFile = fopen( file_name, "r" );*/
+  pFile = fopen( in_file, "r" );
+  if( pFile == NULL ) { printf("unable to open input file: %s\n", in_file ); return 1; }
+
+  fout = fopen( out_file, "w" );
+  if( fout == NULL ) { printf("unable to open output file: %s\n", out_file ); return 2; }
   
   if( init( pFile ) ) goto error;
 
@@ -128,7 +144,7 @@ int main( int argc, char ** argv )
   do 
     {
       /* Pipeline */
-      printf("c#%d ", cycle );
+      fprintf( fout, "c#%d ", cycle );
       wb();
       mem3();
       mem2();
@@ -137,7 +153,7 @@ int main( int argc, char ** argv )
       id();
       if2();
       if1();
-      printf("\n");
+      fprintf( fout, "\n");
       if( !MEM3_stall ) { WB = MEM3; WB_count = MEM3_count; }
       if( !MEM2_stall ) { MEM3 = MEM2; MEM3_count = MEM2_count; }
       if( !MEM1_stall ) { MEM2 = MEM1; MEM2_count = MEM1_count; }
@@ -152,15 +168,16 @@ int main( int argc, char ** argv )
   /* end Pipeline */
 
   /* print end status */
-  print_regs();
-  print_mem();
+  print_regs( fout );
+  print_mem( fout );
   goto end;
  error:
-  printf("ERROR Will Robinson!\n");
+  fprintf( fout, "ERROR Will Robinson!\n");
  end:
   for( i = 0; i < instcount; ++i )
     free( Instructions[i] );
   fclose( pFile );
+  fclose( fout );
   
   return 0;
 }
@@ -169,25 +186,25 @@ int main( int argc, char ** argv )
 /*                            FUNCTIONS DEFINITIONS                                                   */
 /******************************************************************************************************/
 
-void print_regs()
+void print_regs( FILE * pFile )
 {
   int i;
-  printf("REGISTERS\n");
+  fprintf( pFile, "REGISTERS\n" );
   for( i = 0; i < NUMREGS; ++i )
     {
       if( Registers[i] != 0 )
-	printf("R%d %d\n", i+1, Registers[i] );
+	fprintf( pFile, "R%d %d\n", i+1, Registers[i] );
     }
 }
 
-void print_mem()
+void print_mem( FILE * pFile )
 {
   int i;
-  printf("MEMORY\n");
+  fprintf( pFile, "MEMORY\n" );
   for( i = 0; i < MEMSZ; ++i )
     {
       if( Memory[i] != 0 )
-	printf("%d %d\n", i * WORD, Memory[i] );
+	fprintf( pFile, "%d %d\n", i * WORD, Memory[i] );
     }
 }
 
