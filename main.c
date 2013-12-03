@@ -110,12 +110,17 @@ int main( int argc, char ** argv )
   int i;
   char in_file[MAX_STR+1];
   char out_file[MAX_STR+1];
-  /*************/
+  int do_continue;
+  char line[MAX_STR+1];
 
-  /* variable init */
-  /*fout = stdout; */
-  /****************/
+  /* initialize variables */
+  do_continue = 0;
+  i = 0;
+  pFile = NULL;
 
+  /* Here we go... */
+do
+  {
   printf("Input file? ");
   fgets( in_file, MAX_STR, stdin );
 
@@ -170,15 +175,29 @@ int main( int argc, char ** argv )
   /* print end status */
   print_regs( fout );
   print_mem( fout );
-  goto end;
- error:
-  fprintf( fout, "ERROR Will Robinson!\n");
- end:
+
   for( i = 0; i < instcount; ++i )
     free( Instructions[i] );
   fclose( pFile );
   fclose( fout );
-  
+
+  printf("would you like to run again? ");
+  fgets( line, MAX_STR, stdin );
+  if( line[0] == 'y' || line[0] == 'Y' )
+    do_continue = 1;
+  else
+    do_continue = 0;
+
+  } while( do_continue );
+
+    goto end;
+ error:
+  fprintf( fout, "ERROR Will Robinson!\n");
+  for( i = 0; i < instcount; ++i )
+    free( Instructions[i] );
+  fclose( pFile );
+  fclose( fout );
+ end:
   return 0;
 }
 
@@ -454,6 +473,37 @@ int init( FILE * pFile )
 {
   int i;
 
+  instcount = 0;
+  WB = EMPTY;
+  WB_count = 0;
+  MEM3 = EMPTY;
+  MEM3_count = 0;
+  MEM2 = EMPTY;
+  MEM2_count = 0;
+  MEM1 = EMPTY;
+  MEM1_count = 0;
+  EX = EMPTY;
+  EX_count = 0;
+  ID = EMPTY;
+  ID_count = 0;
+  IF2 = EMPTY;
+  IF2_count = 0;
+  IF1 = EMPTY;
+  IF1_count = 1;
+  inst_counter = 0;
+  flush = FALSE;
+  cycle = 1;
+  inst_cycle = 1;
+  
+  IF1_stall  = NOSTALL;
+  IF2_stall  = NOSTALL;
+  ID_stall   = NOSTALL;
+  EX_stall   = NOSTALL;
+  MEM1_stall = NOSTALL;
+  MEM2_stall = NOSTALL;
+  MEM3_stall = NOSTALL;
+  WB_stall   = NOSTALL;
+  
  /* init the registers and memory file */
   for( i = 0; i < NUMREGS; ++i )
     Registers[i] = 0;
