@@ -20,7 +20,7 @@
 #define MADDR( x )  ( (x) * WORD )
 #define RADDR( x )  ( (x) - 1 )
 
-#define _DEBUG
+/* #define _DEBUG */
 
 /* TYPES */
 typedef int32_t RegVal;
@@ -105,7 +105,6 @@ void wb();
 int main( int argc, char ** argv )
 {
   /* variables */
-  /*  const char * file_name = "input.txt"; */
   FILE * pFile;
   int i;
   char in_file[MAX_STR+1];
@@ -132,20 +131,18 @@ do
   sscanf( out_file, "%s\n", out_file );
 
   /* Open File */
-  /*pFile = fopen( file_name, "r" );*/
   pFile = fopen( in_file, "r" );
   if( pFile == NULL ) { printf("unable to open input file: %s\n", in_file ); return 1; }
 
   fout = fopen( out_file, "w" );
   if( fout == NULL ) { printf("unable to open output file: %s\n", out_file ); return 2; }
   
-  if( init( pFile ) ) goto error;
+  if( init( pFile ) ) goto unable_to_parse;
 
 #ifdef _DEBUG
-  /*  print_insts(); */
+  print_insts();
 #endif
 
-  i = 0;
   do 
     {
       /* Pipeline */
@@ -175,7 +172,12 @@ do
   /* print end status */
   print_regs( fout );
   print_mem( fout );
+  goto ask_to_go_again;
 
+  unable_to_parse:
+  fprintf( fout, "Error in input file: %s\n", in_file );
+  
+  ask_to_go_again:
   for( i = 0; i < instcount; ++i )
     free( Instructions[i] );
   fclose( pFile );
@@ -190,15 +192,16 @@ do
 
   } while( do_continue );
 
-    goto end;
- error:
-  fprintf( fout, "ERROR Will Robinson!\n");
-  for( i = 0; i < instcount; ++i )
-    free( Instructions[i] );
-  fclose( pFile );
-  fclose( fout );
+ goto end;
+ 
+ /* error: */
+ fprintf( fout, "Unrecoverable error\n");
+ for( i = 0; i < instcount; ++i )
+   free( Instructions[i] );
+ fclose( pFile );
+ fclose( fout );
  end:
-  return 0;
+ return 0;
 }
 
 /******************************************************************************************************/
@@ -515,6 +518,8 @@ int init( FILE * pFile )
   if( read_regs( pFile ) ) return 1;
   if( read_mem( pFile ) ) return 1;
   if( read_insts( pFile ) ) return 1;
+
+  if( instcount == 0 ) return 1;
 
   return 0;
 }
